@@ -59,39 +59,41 @@
     </div>
 
     <script>
-        const ESP_IP = "http://192.168.86.153"; // Replace with your actual ESP8266 IP
+        const channelID = "2971659"; // Replace with your ThingSpeak Channel ID
+    const readAPIKey = "S2KNBP1HSY392RTF"; // If public channel, leave it as an empty string
 
-        async function updateStatus() {
-    try {
-        const response = await fetch(`${ESP_IP}/?t=${Date.now()}`);
-        if (!response.ok) throw new Error("HTTP Error " + response.status);
-        const data = await response.text();
+    async function updateStatus() {
+        const url = `https://api.thingspeak.com/channels/${channelID}/feeds/last.json${readAPIKey ? `?api_key=${readAPIKey}` : ""}`;
 
-        const [fallStatus, lat, lng] = data.split(",");
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
 
-        const statusElement = document.getElementById("status");
-        const locationElement = document.getElementById("location");
+            const fallStatus = data.field1;
+            const lat = data.field2;
+            const lng = data.field3;
 
-        const cleanStatus = fallStatus.trim().toUpperCase();
-        statusElement.innerText = `Status: ${cleanStatus}`;
-        statusElement.className = cleanStatus.includes("FALL") ? "alert" : "safe";
+            const statusElement = document.getElementById("status");
+            const locationElement = document.getElementById("location");
 
-        if (lat && lng && !lat.includes("not")) {
-            locationElement.innerText = `Latitude: ${lat}, Longitude: ${lng}`;
-        } else {
-            locationElement.innerText = "Location not available";
+            const cleanStatus = (fallStatus || "Unknown").trim().toUpperCase();
+            statusElement.innerText = `Status: ${cleanStatus}`;
+            statusElement.className = cleanStatus.includes("FALL") ? "alert" : "safe";
+
+            if (lat && lng) {
+                locationElement.innerText = `Latitude: ${lat}, Longitude: ${lng}`;
+            } else {
+                locationElement.innerText = "Location not available";
+            }
+        } catch (error) {
+            console.error("ThingSpeak Fetch Error:", error);
+            document.getElementById("status").innerText = "Error fetching status.";
+            document.getElementById("location").innerText = "Error fetching location.";
         }
-
-    } catch (error) {
-        document.getElementById("status").innerText = "Error fetching status.";
-        document.getElementById("location").innerText = "Error fetching GPS data.";
-        console.error("Fetch Error:", error);
     }
-}
 
-
-        window.onload = updateStatus;
-        setInterval(updateStatus, 5000);
+    window.onload = updateStatus;
+    setInterval(updateStatus, 15000); // ThingSpeak limits updates to once every 15 seconds
     </script>
 </body>
 </html>
