@@ -2,41 +2,80 @@
 <html>
 <head>
     <title>Smart Walker Status</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             text-align: center;
-            background: linear-gradient(120deg, #fbd786, #f7797d); /* orange gradient */
+            background: linear-gradient(120deg, #fbd786, #f7797d);
             min-height: 100vh;
+            margin: 0;
             display: flex;
             align-items: center;
             justify-content: center;
         }
+
         .container {
             background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0px 0px 20px rgba(0, 0, 0, 0.2);
+            max-width: 500px;
+            width: 90%;
+            animation: fadeIn 1s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h1 {
+            color: #007bff;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            margin: 15px 0;
             padding: 20px;
             border-radius: 10px;
-            box-shadow: 0px 0px 15px rgba(0, 0, 0, 0.2);
-            max-width: 400px;
+            background: #f8f9fa;
+            box-shadow: inset 0px 0px 5px rgba(0,0,0,0.05);
         }
-        h1 { color: #007bff; }
-        p {
-            font-size: 18px;
-            color: #333;
+
+        .status-icon {
+            font-size: 28px;
+            margin-right: 10px;
         }
-        #status, #location {
-            font-size: 20px;
-            font-weight: bold;
-            margin: 10px 0;
-        }
+
         .safe {
-            color: #007bff;
+            color: #28a745;
         }
+
         .alert {
-            color: red;
+            color: #dc3545;
         }
+
+        .info-label {
+            font-weight: bold;
+            color: #555;
+        }
+
+        #map {
+            width: 100%;
+            height: 250px;
+            border-radius: 10px;
+            margin-top: 10px;
+        }
+
+        .timestamp {
+            font-size: 14px;
+            color: #777;
+            margin-top: 10px;
+        }
+
         button {
-            margin-top: 15px;
+            margin-top: 20px;
             padding: 10px 20px;
             border: none;
             border-radius: 5px;
@@ -45,55 +84,92 @@
             font-size: 16px;
             cursor: pointer;
         }
+
         button:hover {
             background-color: #0056b3;
+        }
+
+        .loading {
+            font-size: 16px;
+            color: #555;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Smart Walker Status</h1>
-        <p id="status">Checking fall status...</p>
-        <p id="location">Fetching GPS data...</p>
+
+        <div id="statusCard" class="card">
+            <div id="status" class="loading"><i class="fas fa-spinner fa-spin"></i> Checking fall status...</div>
+        </div>
+
+        <div id="locationCard" class="card">
+            <div id="location" class="loading"><i class="fas fa-spinner fa-spin"></i> Fetching GPS data...</div>
+            <div id="map"></div>
+        </div>
+
+        <div id="timestamp" class="timestamp"></div>
+
         <button onclick="updateStatus()">Refresh Data</button>
     </div>
 
     <script>
         const channelID = "2971659"; // Replace with your ThingSpeak Channel ID
-    const readAPIKey = "S2KNBP1HSY392RTF"; // If public channel, leave it as an empty string
+        const readAPIKey = "S2KNBP1HSY392RTF"; // Leave blank if public
 
-    async function updateStatus() {
-        const url = `https://api.thingspeak.com/channels/${channelID}/feeds/last.json${readAPIKey ? `?api_key=${readAPIKey}` : ""}`;
+        async function updateStatus() {
+            const url = `https://api.thingspeak.com/channels/${channelID}/feeds/last.json${readAPIKey ? `?api_key=${readAPIKey}` : ""}`;
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
 
-        try {
-            const response = await fetch(url);
-            const data = await response.json();
+                const fallStatus = (data.field1 || "Unknown").trim().toUpperCase();
+                const lat = data.field2;
+                const lng = data.field3;
+                const createdAt = new Date(data.created_at);
 
-            const fallStatus = data.field1;
-            const lat = data.field2;
-            const lng = data.field3;
+                const statusElement = document.getElementById("status");
+                const locationElement = document.getElementById("location");
+                const timestampElement = document.getElementById("timestamp");
 
-            const statusElement = document.getElementById("status");
-            const locationElement = document.getElementById("location");
+                if (fallStatus.includes("FALL")) {
+                    statusElement.innerHTML = `<i class="fas fa-exclamation-triangle status-icon alert"></i> <span class="alert">Status: ${fallStatus}</span>`;
+                } else {
+                    statusElement.innerHTML = `<i class="fas fa-check-circle status-icon safe"></i> <span class="safe">Status: ${fallStatus}</span>`;
+                }
 
-            const cleanStatus = (fallStatus || "Unknown").trim().toUpperCase();
-            statusElement.innerText = `Status: ${cleanStatus}`;
-            statusElement.className = cleanStatus.includes("FALL") ? "alert" : "safe";
+                if (lat && lng) {
+                    locationElement.innerHTML = `<i class="fas fa-map-marker-alt status-icon"></i> Latitude: ${lat}, Longitude: ${lng}`;
+                    loadMap(lat, lng);
+                } else {
+                    locationElement.innerHTML = `<i class="fas fa-times-circle status-icon alert"></i> Location not available`;
+                    document.getElementById("map").innerHTML = "";
+                }
 
-            if (lat && lng) {
-                locationElement.innerText = `Latitude: ${lat}, Longitude: ${lng}`;
-            } else {
-                locationElement.innerText = "Location not available";
+                timestampElement.innerText = `Last updated: ${createdAt.toLocaleString()}`;
+            } catch (error) {
+                console.error("ThingSpeak Fetch Error:", error);
+                document.getElementById("status").innerText = "Error fetching status.";
+                document.getElementById("location").innerText = "Error fetching location.";
             }
-        } catch (error) {
-            console.error("ThingSpeak Fetch Error:", error);
-            document.getElementById("status").innerText = "Error fetching status.";
-            document.getElementById("location").innerText = "Error fetching location.";
         }
-    }
 
-    window.onload = updateStatus;
-    setInterval(updateStatus, 15000); // ThingSpeak limits updates to once every 15 seconds
+        function loadMap(lat, lng) {
+            const mapDiv = document.getElementById("map");
+            mapDiv.innerHTML = `
+                <iframe
+                    width="100%"
+                    height="100%"
+                    frameborder="0" style="border:0"
+                    referrerpolicy="no-referrer-when-downgrade"
+                    src="https://www.google.com/maps?q=${lat},${lng}&z=15&output=embed"
+                    allowfullscreen>
+                </iframe>
+            `;
+        }
+
+        window.onload = updateStatus;
+        setInterval(updateStatus, 15000);
     </script>
 </body>
 </html>
